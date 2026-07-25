@@ -1,0 +1,25 @@
+# Heuristic failure-mode detection + intervention thresholds. Deterministic and
+# logged — the novelty being tested is the MATCHING, not detector sophistication.
+
+# Interventions are only considered once the run is trending over budget. Gating on
+# cost_ratio here is also what keeps interventions OFF easy tasks (they never reach
+# this ratio), satisfying the "do NOT intervene on easy tasks" hard rule.
+trigger_cost_ratio: 0.60
+
+# Tool loop: the most-repeated (tool_name, args_hash) pair occurs >= this many times.
+tool_loop_repeats: 3
+
+# Context blowout: context size grew by more than this ratio over the lookback window.
+context_growth_ratio: 1.50
+context_growth_lookback: 3
+
+# Wrong model: high cost but context roughly flat -> growth under this ratio counts as flat.
+context_flat_ratio: 1.15
+
+# Inherent difficulty: cost ratio already this high within the first `early_steps` steps,
+# with no loop/blowout waste signal -> the task is just expensive; block/escalate.
+inherent_difficulty_ratio: 0.90
+early_steps: 4
+
+# Compaction keeps system messages + the first (task) turn + this many recent turns.
+compact_keep_recent_turns: 3
