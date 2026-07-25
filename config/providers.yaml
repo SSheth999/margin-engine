@@ -1,0 +1,26 @@
+# Which backend the gateway talks to. Swapping providers is a one-line change here,
+# never a code change — same "single switch" principle as the arm selector.
+active_provider: mock   # mock | ollama | anthropic
+
+providers:
+  ollama:
+    # OpenAI-compatible endpoint exposed by a local Ollama daemon.
+    base_url: http://localhost:11434/v1
+    # primary = the model the agent runs on; cheap = the downshift sibling.
+    # Pick tags that are actually pulled locally (`ollama pull ...`).
+    model_pair:
+      primary: qwen2.5:32b
+      cheap: qwen2.5:7b
+
+  anthropic:
+    # Native anthropic SDK reads the key from the ANTHROPIC_API_KEY env var.
+    model_pair:
+      primary: claude-sonnet-5
+      cheap: claude-haiku-4-5-20251001
+
+  mock:
+    # Deterministic test double (no inference, no network). Used to validate the
+    # rig end-to-end before Ollama/Anthropic are available. See providers/mock_provider.py.
+    model_pair:
+      primary: mock-large
+      cheap: mock-small

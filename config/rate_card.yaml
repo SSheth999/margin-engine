@@ -1,0 +1,42 @@
+# Per-model pricing, expressed in USD per 1,000,000 tokens.
+# cost.py converts to per-token internally.
+#
+# Ollama rates are SYNTHETIC — local inference is free, but we apply a made-up
+# rate card to the real token counts so the margin-ceiling mechanics get exercised
+# at zero real spend. They mirror the Anthropic rates so dev behavior tracks prod.
+#
+# Anthropic rates are the real published prices (verify before a real-money run).
+#
+# cache_read_multiplier: fraction of the input rate charged for cached input tokens.
+
+ollama:
+  qwen2.5:32b:
+    input_per_mtok: 3.00
+    output_per_mtok: 15.00
+    cache_read_multiplier: 0.10
+  qwen2.5:7b:
+    input_per_mtok: 1.00
+    output_per_mtok: 5.00
+    cache_read_multiplier: 0.10
+
+anthropic:
+  claude-sonnet-5:
+    input_per_mtok: 3.00
+    output_per_mtok: 15.00
+    cache_read_multiplier: 0.10
+  claude-haiku-4-5-20251001:
+    input_per_mtok: 1.00
+    output_per_mtok: 5.00
+    cache_read_multiplier: 0.10
+
+# Synthetic rates for the mock test double. Deliberately high so multi-step tasks
+# generate visible costs against the margin ceilings during rig validation.
+mock:
+  mock-large:
+    input_per_mtok: 40.00
+    output_per_mtok: 200.00
+    cache_read_multiplier: 0.10
+  mock-small:
+    input_per_mtok: 12.00
+    output_per_mtok: 60.00
+    cache_read_multiplier: 0.10
