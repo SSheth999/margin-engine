@@ -1,0 +1,33 @@
+# Experiment config for the E2B + Terminal-Bench 2 matrix.
+
+terminal_bench:
+  # Local clone of harbor-framework/terminal-bench-2-1 tasks. Populate with
+  # scripts/fetch_terminal_bench.sh (does a sparse checkout of tasks/).
+  tasks_root: tasks/terminal_bench/tasks
+
+  # Optional allow-list of task_ids to run. Empty/omitted = all discovered tasks.
+  # Start small to control cost/time, then scale toward the full ~89.
+  include_tasks:
+    - fix-git
+
+  # Optional cap on number of tasks (applied after include filtering).
+  limit: null
+
+  # Skip tasks that request GPUs (gpus > 0). Set false only if your E2B instance
+  # provides GPU sandboxes.
+  skip_gpu_tasks: true
+
+# Contracted price + target margin synthesized per TB2 difficulty bucket.
+# ceiling = price * (1 - margin).
+price_by_class:
+  easy: 0.50
+  medium: 1.00
+  hard: 1.50
+margin_by_class:
+  easy: 0.70
+  medium: 0.70
+  hard: 0.70
+
+# E2B connection is read from env by the SDK: E2B_API_KEY (required),
+# E2B_DOMAIN (for a self-hosted E2B instance). Each Harbor image is built into an E2B
+# template once; the image -> alias map is cached in config/e2b_templates.json.
