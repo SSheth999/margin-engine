@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+runs/*.json
+runs/workspaces/
+analysis_out/
+config/labels.json
+config/e2b_templates.json
+tasks/terminal_bench/
+.env
+.pytest_cache/
+.DS_Store

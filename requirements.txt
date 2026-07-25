@@ -1,0 +1,12 @@
+fastapi==0.139.2
+uvicorn[standard]==0.51.0
+httpx==0.28.1
+PyYAML==6.0.3
+anthropic==0.117.0
+pytest==9.1.1
+numpy==2.5.1
+matplotlib==3.11.1
+e2b                     # E2B sandbox SDK (open-source; for the real TB2 matrix)
+python-dotenv           # loads .env (credentials) at orchestrator startup
+# tomllib is stdlib (Python 3.11+) — used to parse Terminal-Bench task.toml
+
