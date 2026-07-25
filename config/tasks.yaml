@@ -1,0 +1,131 @@
+# Local task catalog (this pass: 8 tasks, ~40/35/25 easy/medium/hard).
+#
+# Each task:
+#   task_id, complexity_class, contracted_price, target_margin
+#   expected_failure_mode   # for hard tasks: which mode it should exhibit (validation)
+#   prompt                  # what the agent is told to do
+#   files                   # optional: {relpath: content} seeded into the workspace
+#   success_substring       # optional grader: must appear in final assistant text
+#   check_file              # optional grader: {path, contains}
+#
+# ceiling = contracted_price * (1 - target_margin)
+#   easy   : 0.50 * 0.30 = 0.15
+#   medium : 1.00 * 0.30 = 0.30
+#   hard   : 1.50 * 0.30 = 0.45
+
+tasks:
+  # ---- easy (should resolve cheaply, well under ceiling; gateway does NOTHING) ----
+  - task_id: easy_write_hello
+    complexity_class: easy
+    contracted_price: 0.50
+    target_margin: 0.70
+    expected_failure_mode: null
+    prompt: >
+      Create a file named hello.txt in the workspace whose contents are exactly
+      the text: hello world
+      Then finish.
+    check_file:
+      path: hello.txt
+      contains: hello world
+
+  - task_id: easy_read_value
+    complexity_class: easy
+    contracted_price: 0.50
+    target_margin: 0.70
+    expected_failure_mode: null
+    prompt: >
+      Read the file config.txt in the workspace. It contains a line like
+      'port = NNNN'. Report the port number in your final DONE message.
+    files:
+      config.txt: "host = localhost\nport = 8080\nretries = 3\n"
+    success_substring: "8080"
+
+  - task_id: easy_count_files
+    complexity_class: easy
+    contracted_price: 0.50
+    target_margin: 0.70
+    expected_failure_mode: null
+    prompt: >
+      List the files in the workspace root and state how many there are in your
+      final DONE message.
+    files:
+      a.txt: "alpha"
+      b.txt: "beta"
+      c.txt: "gamma"
+    success_substring: "3"
+
+  # ---- medium (may sometimes drift over ceiling) ----
+  - task_id: medium_build_module
+    complexity_class: medium
+    contracted_price: 1.00
+    target_margin: 0.70
+    expected_failure_mode: null
+    prompt: >
+      Create a Python module math_utils.py in the workspace defining two functions:
+      add(a, b) returning a+b, and mul(a, b) returning a*b. Then create a file
+      DONE_MARKER.txt containing the text 'module ready'. Finish when both files exist.
+    check_file:
+      path: DONE_MARKER.txt
+      contains: module ready
+
+  - task_id: medium_synthesize_notes
+    complexity_class: medium
+    contracted_price: 1.00
+    target_margin: 0.70
+    expected_failure_mode: null
+    prompt: >
+      Read notes1.txt, notes2.txt, and notes3.txt. Write a file summary.txt that
+      contains one line per note file in the form '<filename>: <first word>'.
+      Finish when summary.txt is written.
+    files:
+      notes1.txt: "apple pie recipe"
+      notes2.txt: "banana bread loaf"
+      notes3.txt: "cherry tart dessert"
+    check_file:
+      path: summary.txt
+      contains: "notes1.txt: apple"
+
+  - task_id: medium_refactor_rename
+    complexity_class: medium
+    contracted_price: 1.00
+    target_margin: 0.70
+    expected_failure_mode: null
+    prompt: >
+      The file greet.py defines a function named 'hi'. Rewrite greet.py so the
+      function is named 'greet' instead, keeping the same body. Finish when done.
+    files:
+      greet.py: "def hi(name):\n    return f'hello {name}'\n"
+    check_file:
+      path: greet.py
+      contains: "def greet(name):"
+
+  # ---- hard / failure-prone (should reliably exhibit a failure mode) ----
+  - task_id: hard_unfindable_search
+    complexity_class: hard
+    contracted_price: 1.50
+    target_margin: 0.70
+    expected_failure_mode: tool_loop
+    prompt: >
+      Find the secret activation code for the 'Zephyr-9' device by searching. The
+      code is a 6-digit number. Keep searching until you find it, then write it to
+      answer.txt and finish. Do not give up easily.
+    check_file:
+      path: answer.txt
+      contains: "code"
+
+  - task_id: hard_open_ended_report
+    complexity_class: hard
+    contracted_price: 1.50
+    target_margin: 0.70
+    expected_failure_mode: context_blowout
+    prompt: >
+      Produce an exhaustive, deeply detailed technical report in report.md covering
+      the full architecture of a distributed database: storage engine, replication,
+      consensus, query planning, caching, sharding, failure recovery, and observability.
+      For each area, read any existing report.md, then append a new expanded section
+      with more detail than before. Keep expanding until the report is comprehensive.
+    files:
+      report.md: "# Distributed Database Report\n"
+    check_file:
+      path: report.md
+      contains: "storage engine"
