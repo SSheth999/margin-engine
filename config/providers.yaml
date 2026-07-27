@@ -1,6 +1,6 @@
 # Which backend the gateway talks to. Swapping providers is a one-line change here,
 # never a code change — same "single switch" principle as the arm selector.
-active_provider: mock   # mock | ollama | anthropic
+active_provider: ollama   # mock | ollama | anthropic
 
 providers:
   ollama:
@@ -9,8 +9,8 @@ providers:
     # primary = the model the agent runs on; cheap = the downshift sibling.
     # Pick tags that are actually pulled locally (`ollama pull ...`).
     model_pair:
-      primary: qwen2.5:32b
-      cheap: qwen2.5:7b
+      primary: qwen3.5:9b
+      cheap: qwen3.5:4b   # downshift target — change to your pulled smaller tag
 
   anthropic:
     # Native anthropic SDK reads the key from the ANTHROPIC_API_KEY env var.
