@@ -144,7 +144,7 @@ def ensure_template(image: str, cache: dict[str, str], task: TBTask) -> str:
     alias = _template_alias(image)
     if not Template.alias_exists(alias):
         print(f"[e2b] building template {alias} from {image} (first use)...")
-        builder = Template.from_image(image)
+        builder = Template().from_image(image)
         Template.build(
             builder,
             alias=alias,
