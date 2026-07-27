@@ -9,8 +9,8 @@ providers:
     # primary = the model the agent runs on; cheap = the downshift sibling.
     # Pick tags that are actually pulled locally (`ollama pull ...`).
     model_pair:
-      primary: qwen3.5:9b
-      cheap: qwen3.5:4b   # downshift target — change to your pulled smaller tag
+      primary: qwen3.5:4b
+      cheap: qwen3:1.7b   # downshift target (smaller sibling)
 
   anthropic:
     # Native anthropic SDK reads the key from the ANTHROPIC_API_KEY env var.

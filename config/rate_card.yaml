@@ -11,11 +11,12 @@
 
 ollama:
   # Model names MUST match config/providers.yaml exactly, or cost logs $0.
-  qwen3.5:9b:
+  # primary (4b) is priced higher than the cheap sibling so downshift saves cost.
+  qwen3.5:4b:
     input_per_mtok: 3.00
     output_per_mtok: 15.00
     cache_read_multiplier: 0.10
-  qwen3.5:4b:
+  qwen3:1.7b:
     input_per_mtok: 1.00
     output_per_mtok: 5.00
     cache_read_multiplier: 0.10
