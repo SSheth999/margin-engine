@@ -179,7 +179,17 @@ def run_matrix(
 
     for arm in arms:
         for task in tasks:
-            alias = ensure_template(task.docker_image, template_cache, task)
+            try:
+                alias = ensure_template(task.docker_image, template_cache, task)
+            except Exception as e:
+                # A bad/incompatible image must not sink the whole sweep — skip the task.
+                print(f"[{task.task_id}__{arm}] TEMPLATE BUILD FAILED, skipping: {e!r}")
+                for seed in seeds:
+                    results.append({
+                        "run_id": f"{task.task_id}__{arm}__seed{seed}",
+                        "error": f"template_build_failed: {e!r}",
+                    })
+                continue
             for seed in seeds:
                 run_id = f"{task.task_id}__{arm}__seed{seed}"
                 port = _free_port()

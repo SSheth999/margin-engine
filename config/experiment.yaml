@@ -7,11 +7,8 @@ terminal_bench:
 
   # Optional allow-list of task_ids to run. Empty/omitted = all discovered tasks.
   # Start small to control cost/time, then scale toward the full ~89.
-  include_tasks:
-    - fix-git                 # easy  — should stay under ceiling (no intervention)
-    - chess-best-move         # medium
-    - fix-code-vulnerability  # hard  — likely to trend over budget
-    - cancel-async-tasks      # hard
+  # Full benchmark: all discovered tasks (empty include = no filter).
+  include_tasks: []
 
   # Optional cap on number of tasks (applied after include filtering).
   limit: null
