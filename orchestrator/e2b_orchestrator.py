@@ -192,6 +192,12 @@ def run_matrix(
                 continue
             for seed in seeds:
                 run_id = f"{task.task_id}__{arm}__seed{seed}"
+                # Resumable: skip runs already logged, so a killed sweep (e.g. laptop
+                # sleep) can be relaunched cheaply and picks up where it left off.
+                existing = RUNS_DIR / f"{run_id}.json"
+                if existing.exists():
+                    print(f"[{run_id}] SKIP (already logged)")
+                    continue
                 port = _free_port()
                 proc = None
                 env = None
