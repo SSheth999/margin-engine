@@ -8,7 +8,10 @@ terminal_bench:
   # Optional allow-list of task_ids to run. Empty/omitted = all discovered tasks.
   # Start small to control cost/time, then scale toward the full ~89.
   include_tasks:
-    - fix-git
+    - fix-git                 # easy  — should stay under ceiling (no intervention)
+    - chess-best-move         # medium
+    - fix-code-vulnerability  # hard  — likely to trend over budget
+    - cancel-async-tasks      # hard
 
   # Optional cap on number of tasks (applied after include filtering).
   limit: null
@@ -19,10 +22,14 @@ terminal_bench:
 
 # Contracted price + target margin synthesized per TB2 difficulty bucket.
 # ceiling = price * (1 - margin).
+# Calibrated to the gpt-5.6-terra cost regime observed on an Arm-A pass so that easy
+# tasks stay under ceiling (no false-positive interventions) while pricier tasks blow
+# and exercise the arms. ceiling = price * (1 - margin).
+#   easy   0.20 * 0.30 = 0.060   medium 0.35 * 0.30 = 0.105   hard 0.40 * 0.30 = 0.120
 price_by_class:
-  easy: 0.50
-  medium: 1.00
-  hard: 1.50
+  easy: 0.20
+  medium: 0.35
+  hard: 0.40
 margin_by_class:
   easy: 0.70
   medium: 0.70

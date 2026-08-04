@@ -20,10 +20,12 @@ providers:
 
   openai:
     # Native OpenAI Chat Completions. Key from the OPENAI_API_KEY env var.
+    # gpt-5.x are reasoning models — the adapter runs them at reasoning_effort=none
+    # (fast, tool-capable) and uses max_completion_tokens.
     base_url: https://api.openai.com/v1
     model_pair:
-      primary: gpt-4.1
-      cheap: gpt-4.1-mini   # downshift target
+      primary: gpt-5.6-terra
+      cheap: gpt-5-mini   # downshift target (cheaper sibling)
 
   mock:
     # Deterministic test double (no inference, no network). Used to validate the

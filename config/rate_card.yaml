@@ -22,8 +22,17 @@ ollama:
     cache_read_multiplier: 0.10
 
 openai:
-  # Real published OpenAI pricing (USD per 1M tokens). cache_read_multiplier 0.25
-  # reflects OpenAI's ~75%-off cached input.
+  # USD per 1M tokens. cache_read_multiplier 0.25 = OpenAI's ~75%-off cached input.
+  # gpt-5.x figures are approximate (exact public pricing unverified) but preserve the
+  # primary >> downshift ordering the experiment relies on.
+  gpt-5.6-terra:
+    input_per_mtok: 2.50
+    output_per_mtok: 10.00
+    cache_read_multiplier: 0.25
+  gpt-5-mini:
+    input_per_mtok: 0.25
+    output_per_mtok: 2.00
+    cache_read_multiplier: 0.25
   gpt-4.1:
     input_per_mtok: 2.00
     output_per_mtok: 8.00

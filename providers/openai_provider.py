@@ -20,8 +20,13 @@ from typing import Any
 
 import httpx
 
-from gateway.schema import ChatResponse, ToolCall, Usage
+from gateway.schema import ChatRequest, ChatResponse, ToolCall, Usage
 from providers.ollama_provider import OllamaProvider, _STOP_REASON_MAP
+
+
+def _is_reasoning_model(model: str) -> bool:
+    """GPT-5 / o-series reasoning models use a different param surface."""
+    return model.startswith("gpt-5") or model.startswith("o3") or model.startswith("o4")
 
 
 class OpenAIProvider(OllamaProvider):
@@ -32,6 +37,25 @@ class OpenAIProvider(OllamaProvider):
         super().__init__(base_url=base_url, timeout=timeout)
         self._api_key = api_key
 
+    def _to_wire(self, request: ChatRequest) -> dict[str, Any]:
+        # Reasoning models (gpt-5*, o-series) reject max_tokens/temperature and need
+        # reasoning_effort='none' to use function tools over chat completions.
+        if not _is_reasoning_model(request.model):
+            return super()._to_wire(request)
+        messages = [self._msg_to_wire(m) for m in request.messages]
+        payload: dict[str, Any] = {
+            "model": request.model,
+            "messages": messages,
+            "max_completion_tokens": max(request.max_tokens, 2048),
+            "reasoning_effort": "none",
+            "stream": False,
+        }
+        if request.tools:
+            payload["tools"] = [self._tool_to_wire(t) for t in request.tools]
+        # Pass through extras except temperature (unsupported here).
+        payload.update({k: v for k, v in request.extra.items() if k != "temperature"})
+        return payload
+
     def complete(self, request):
         payload = self._to_wire(request)
         headers = {"Authorization": f"Bearer {self._api_key}"}
@@ -39,6 +63,17 @@ class OpenAIProvider(OllamaProvider):
             resp = client.post(
                 f"{self.base_url}/chat/completions", json=payload, headers=headers
             )
+            # GPT-5 models disagree on the reasoning_effort value that supports tools
+            # (e.g. gpt-5.6-* need 'none', gpt-5-mini needs 'minimal'). Auto-fall back.
+            if (
+                resp.status_code == 400
+                and "reasoning_effort" in resp.text
+                and payload.get("reasoning_effort") == "none"
+            ):
+                payload["reasoning_effort"] = "minimal"
+                resp = client.post(
+                    f"{self.base_url}/chat/completions", json=payload, headers=headers
+                )
             resp.raise_for_status()
             data = resp.json()
         return self._from_wire(data)
