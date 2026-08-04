@@ -1,6 +1,6 @@
 # Which backend the gateway talks to. Swapping providers is a one-line change here,
 # never a code change — same "single switch" principle as the arm selector.
-active_provider: ollama   # mock | ollama | anthropic
+active_provider: openai   # mock | ollama | anthropic | openai
 
 providers:
   ollama:
@@ -17,6 +17,13 @@ providers:
     model_pair:
       primary: claude-sonnet-5
       cheap: claude-haiku-4-5-20251001
+
+  openai:
+    # Native OpenAI Chat Completions. Key from the OPENAI_API_KEY env var.
+    base_url: https://api.openai.com/v1
+    model_pair:
+      primary: gpt-4.1
+      cheap: gpt-4.1-mini   # downshift target
 
   mock:
     # Deterministic test double (no inference, no network). Used to validate the

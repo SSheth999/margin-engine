@@ -21,6 +21,18 @@ ollama:
     output_per_mtok: 5.00
     cache_read_multiplier: 0.10
 
+openai:
+  # Real published OpenAI pricing (USD per 1M tokens). cache_read_multiplier 0.25
+  # reflects OpenAI's ~75%-off cached input.
+  gpt-4.1:
+    input_per_mtok: 2.00
+    output_per_mtok: 8.00
+    cache_read_multiplier: 0.25
+  gpt-4.1-mini:
+    input_per_mtok: 0.40
+    output_per_mtok: 1.60
+    cache_read_multiplier: 0.25
+
 anthropic:
   claude-sonnet-5:
     input_per_mtok: 3.00

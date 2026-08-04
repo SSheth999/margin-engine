@@ -78,6 +78,17 @@ def load_provider(
         from providers.anthropic_provider import AnthropicProvider
 
         provider = AnthropicProvider()
+    elif active == "openai":
+        import os
+
+        from providers.openai_provider import OpenAIProvider
+
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise RuntimeError("OPENAI_API_KEY not set (needed for the openai provider).")
+        provider = OpenAIProvider(
+            api_key=key, base_url=pconf.get("base_url", "https://api.openai.com/v1")
+        )
     elif active == "mock":
         from providers.mock_provider import MockProvider
 
