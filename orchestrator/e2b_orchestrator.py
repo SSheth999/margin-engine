@@ -160,9 +160,10 @@ def ensure_template(image: str, cache: dict[str, str], task: TBTask) -> str:
 def _create_sandbox(alias: str, task: TBTask):
     from e2b import Sandbox
 
+    # E2B caps sandbox timeout at 1 hour; some Harbor tasks request more, which 400s.
     return Sandbox.create(
         template=alias,
-        timeout=max(120, int(task.agent_timeout_sec)),
+        timeout=min(3600, max(120, int(task.agent_timeout_sec))),
         allow_internet_access=task.allow_internet,
     )
 
