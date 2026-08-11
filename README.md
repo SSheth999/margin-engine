@@ -9,6 +9,47 @@ A controlled experiment testing one hypothesis (see `AGENTS.MD` for the full spe
 This repo is the smallest rig that can prove or disprove that on real agent
 trajectories — not the production product.
 
+## Results (full Terminal-Bench 2 benchmark)
+
+**Setup:** all 89 Terminal-Bench 2.1 (Harbor) tasks × 4 arms × 1 seed = **349 completed
+runs** (7 tasks have images that can't run in every arm). Agent model **gpt-5.6** driving
+real tasks in isolated **E2B** sandboxes; **gpt-5-mini** as the downshift target;
+objective pass/fail grading via each task's own test suite. Per-difficulty margin ceilings
+were calibrated to the observed gpt-5.6 cost regime so tasks *can* blow budget. Total
+real spend: **$34.64**, with **569 interventions** fired.
+
+| arm | mean | P90 | **P99** | std | **margin-blown** | resolved |
+|-----|------|-----|---------|-----|------------------|----------|
+| **A** control | $0.123 | $0.282 | $0.452 | 0.112 | **41.4%** | 29.9% |
+| **B** generic downshift | $0.062 | $0.097 | **$0.117** | 0.028 | **2.3%** | 23.0% |
+| **C** matched | $0.086 | $0.159 | $0.215 | 0.055 | 32.2% | 26.4% |
+| **C-oracle** (true mode) | $0.126 | $0.305 | $0.549 | 0.129 | 37.5% | 23.9% |
+
+**Verdict: the "matching" hypothesis is *not* supported — generic downshift wins.**
+
+- **Generic downshift (B) dominates on cost/variance:** it cut margin-blown from **41% → 2.3%**
+  and P99 nearly 4× vs the A control. Blunt "switch to a cheaper model when trending over
+  budget" is by far the most effective lever.
+- **Matched (C) beats the control but loses decisively to B** (32% vs 2.3% blown). Matching
+  the intervention to the failure mode did *not* beat the generic policy.
+- **C-oracle — a *perfect* detector — has the worst tail of all** ($0.549 P99). Applying the
+  "correct" matched fix actively hurt.
+
+**Why (per-failure-mode breakdown):** the matched interventions are weak cost controllers.
+For **context_blowout** (the dominant mode), downshift → 2.4% blown while *compaction* (the
+matched fix) → 45–61% blown. For **tool_loop**, downshift → 12.5% blown while *tool
+restriction* (the matched fix) → 87.5%. The clever fixes barely move cost; the dumb generic
+one dominates. There is a real cost/quality trade-off: B saves the most money but also loses
+the most resolution (23% vs A's 30%).
+
+This is a **statistically-backed negative result** (n≈87/arm): at full benchmark scale,
+budget interventions clearly help, but *matching the fix to the diagnosed failure mode does
+not beat simply downshifting.* Distribution plot + per-mode table in `analysis_out/`.
+
+> Caveats: one model (gpt-5.6 at reasoning_effort≈none), one seed, ceilings synthesized
+> from difficulty, and gpt-5.6 pricing is approximate. Directional, not the last word —
+> more seeds would tighten the CIs.
+
 ## How it works
 
 An agent runs a task in a loop, sending every model call through a **gateway**. The
@@ -136,8 +177,8 @@ Costs come from real token counts × the per-model rate card in `config/rate_car
 - [x] 5. Post-hoc labeling + Arm C-oracle
 - [x] 7. Analysis (metrics, bootstrap CIs, non-inferiority test, per-mode table, plot)
 - [x] 6. Real E2B + Terminal-Bench 2 wiring (loader, sandbox exec, verifier, orchestrator)
-- [ ] Live TB2 run — needs `E2B_API_KEY` + `ANTHROPIC_API_KEY` (code is ready; not yet executed here)
-- [ ] Real-model validation run (flip provider to ollama/anthropic)
+- [x] Live full-benchmark run — 349 runs across all 89 TB2 tasks × 4 arms on gpt-5.6 via E2B
+      (see **Results** above)
 
 The `mock` results are for **wiring validation**, not the paper's finding: whether
 matched (C) beats generic (B) is the empirical question the real-model runs answer.
