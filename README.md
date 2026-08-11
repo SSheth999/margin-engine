@@ -77,16 +77,123 @@ The arm switch lives in exactly one place — `gateway/arms.py` — so A/B/C/C-o
 share an identical agent, environment, tasks, provider, and state store. That is what
 makes the comparison valid.
 
+## Architecture
+
+One isolated run = one `(task, arm, seed)` triple. The orchestrator spins up a sandbox
+and a gateway, drives the agent, verifies, and tears everything down. Every model call
+flows through the gateway's two interceptors:
+
+```
+┌──────────────────────── one run: (task × arm × seed) ────────────────────────┐
+│                                                                              │
+│   ORCHESTRATOR ── spawns ──► GATEWAY (uvicorn, ephemeral port)               │
+│        │                         ▲          │                               │
+│        │ creates                 │ HTTP     │ native SDK / HTTP             │
+│        ▼                         │          ▼                               │
+│   E2B SANDBOX ◄── run_command ── AGENT     PROVIDER (openai / anthropic /   │
+│   (Harbor image) exec in sandbox (ReAct)    ollama / mock)                  │
+│        │                                                                     │
+│        └── verify: inject tests/ → run test.sh → read reward.txt            │
+│                                                                              │
+│   GATEWAY per model call:                                                    │
+│     PRE-CALL   1. read outcome state (cum cost, steps, ctx sizes, tool hist) │
+│                2. cost_ratio = cum_cost / margin_ceiling                     │
+│                3. detect() failure mode (shadow, logged on every arm)        │
+│                4. arms.decide(arm, …) → passthrough | rewrite req | block    │
+│     ── forward to provider ──►                                               │
+│     POST-CALL  5. cost = usage × rate card                                   │
+│                6. update state store   7. append per-step record to run log  │
+│                                                                              │
+│   fail-open: any gateway-logic error → forward unchanged + log it            │
+└──────────────────────────────────────────────────────────────────────────────┘
+              │ one JSON run log per run  ──►  runs/<task>__<arm>__seed<n>.json
+              ▼
+   ANALYSIS (offline): post-hoc labeling → metrics (P99, blown%, bootstrap CIs,
+   non-inferiority test) → per-mode breakdown → verdict + distribution plot
+```
+
+**Component responsibilities**
+
+| Component | File(s) | Responsibility |
+|---|---|---|
+| **Gateway server** | `gateway/server.py` | FastAPI proxy, one process per run. Parses outcome headers, runs the pre/post interceptors, fails open. |
+| **Canonical schema** | `gateway/schema.py` | Provider-agnostic `ChatRequest` / `ChatResponse` / `Usage`. Interventions mutate this shape, never a wire format. |
+| **State store** | `gateway/state_store.py` | Per-outcome cum cost, step count, context-size history, `(tool, args_hash)` history. In-memory (one outcome per gateway). |
+| **Cost** | `gateway/cost.py` | `usage × rate_card` with additive cached-token discount. |
+| **Detectors** | `gateway/detectors.py` | The four heuristic rules → `DetectionResult`. Also `mode_triggered()` for C-oracle timing parity. |
+| **Interventions** | `gateway/interventions.py` | `downshift` / `compact` / `restrict_tool`, operating on `ChatRequest`. `block` is signalled by the arm. |
+| **Arm switch** | `gateway/arms.py` | The *only* per-arm fork. Maps detected/true mode → intervention. |
+| **Providers** | `providers/*` | One adapter per backend behind `Provider`. Translate canonical ↔ wire, normalize usage. |
+| **Agent** | `agent/harness.py` | Fixed hand-rolled ReAct loop. Pluggable tools + grader + exec env; identical across arms. |
+| **Exec env** | `agent/exec_env.py` | `LocalExecEnv` (subprocess) vs `E2BExecEnv` (sandbox) behind one `ExecEnv` protocol. |
+| **Orchestrators** | `orchestrator/*` | Drive the run matrix (phased A → label → B/C/C-oracle). Resumable; skip already-logged runs. |
+| **Analysis** | `analysis/*` | Labeling, metrics, plots, verdict — fully offline, reads `runs/`. |
+
+## Technical details
+
+**Failure-mode detection** (`detectors.py`) — deterministic heuristics over the trajectory,
+gated on a `trigger_cost_ratio` (default 0.60) so they never fire on cheap/easy runs:
+- `tool_loop` — the most-repeated `(tool_name, args_hash)` occurs ≥3× (fires regardless of
+  cost, since a tight loop blows budget fast).
+- `context_blowout` — context size grew ≥1.5× over the last 3 steps *and* cost is trending over.
+- `inherent_difficulty` — cost ratio ≥0.90 within the first ~4 steps, no waste signal.
+- `wrong_model` — cost trending over, context flat, no loop.
+
+**Interventions** (`interventions.py`) operate on the canonical `ChatRequest`, so they're
+provider-agnostic by construction:
+- `downshift` — swap `model` to the cheap sibling.
+- `compact` — drop stale middle turns, keeping system + the first (task) turn + the last N
+  turns. Works at **turn granularity** so a `tool_use` is never split from its `tool_result`
+  (both wire formats reject an orphaned tool result); the elision note folds into the task
+  message to avoid two consecutive user turns (which Anthropic rejects).
+- `restrict_tool` — remove the looping tool from the `tools` array.
+- `block` — the arm returns `Decision(block=True)`; the gateway returns a stop signal the
+  agent catches to end gracefully.
+
+**C-oracle timing parity** — C-oracle differs from C *only* in which mode it acts on
+(true, from post-hoc labeling) vs detected. `mode_triggered()` makes it fire at the same
+point C would for that mode, so the comparison isolates *diagnosis correctness* from *timing*.
+
+**Provider abstraction** — the canonical schema means the agent, gateway logic, and analysis
+never touch a wire format. Adapters: `openai_provider` (Chat Completions; auto-handles GPT-5
+reasoning models — `max_completion_tokens`, no temperature, `reasoning_effort` with a
+`none → minimal` fallback), `anthropic_provider` (native SDK, system-param + tool_use blocks),
+`ollama_provider` (local, OpenAI-compatible), `mock_provider` (deterministic double / failure
+simulator). Switching backends is one line in `config/providers.yaml`.
+
+**Terminal-Bench verification** — the task's `tests/` are injected into the sandbox *after*
+the agent finishes (so it can't read/game them), `test.sh` runs (installs `uv`, runs pytest
+with `pytest-json-ctrf`), and `/logs/verifier/reward.txt == "1"` sets `resolved`. Objective,
+per-task, not model-judged.
+
+**Analysis methodology** (`analysis/`) — post-hoc labeling assigns each run a
+`true_failure_mode` from its whole trajectory. Metrics lead with tail/variance (P99, P90,
+margin-blown rate, spread), report mean secondarily, add **percentile-bootstrap CIs** on the
+noisy tail metrics, and run a **two-proportion non-inferiority z-test** on resolution rate
+(no scipy). Everything breaks down per failure mode.
+
+**Engineering notes** (hard-won during the full run):
+- **Resumable sweeps** — every completed run is a JSON file on disk; the orchestrator skips
+  existing `(task, arm, seed)` logs, so a killed sweep (laptop sleep, etc.) relaunches and
+  picks up where it left off. Template builds are cached the same way.
+- **Fail-open everywhere** — gateway logic errors never crash a run; provider errors are
+  surfaced to the agent, which ends gracefully.
+- **E2B specifics** — Harbor images are wrapped into E2B templates on first use (Debian-based
+  only); sandbox timeout is clamped to E2B's 1-hour cap; a failed template build skips that
+  task instead of sinking the whole sweep.
+
 ## Layout
 
 ```
 gateway/       schema, cost, state_store, detectors, interventions, arms, run_log, server
-providers/     base + ollama / anthropic / mock adapters (swappable behind one interface)
-agent/         hand-rolled ReAct harness, tools, outcome-context headers
-orchestrator/  local (subprocess) + e2b (TB2 sandbox) run-matrix drivers
+providers/     base + openai / anthropic / ollama / mock adapters (one swappable interface)
+agent/         hand-rolled ReAct harness, tools, terminal_tools, exec_env, outcome-context
+tasks/         tb_loader (Harbor task.toml), tb_verify (inject tests → reward)
+orchestrator/  local (subprocess) + e2b (TB2 sandbox) run-matrix drivers, both resumable
 analysis/      labeling, metrics, plots, report (verdict)
-config/        providers.yaml, rate_card.yaml, detection.yaml, tasks.yaml
-tests/         cost / adapter / detectors / interventions / arms
+config/        providers.yaml, rate_card.yaml, detection.yaml, tasks.yaml, experiment.yaml, env
+scripts/       fetch_terminal_bench.sh (sparse-clone the ~89 TB2 tasks)
+tests/         cost / adapters / detectors / interventions / arms / tb_loader / e2b_exec_env
 ```
 
 ## Setup
@@ -94,7 +201,7 @@ tests/         cost / adapter / detectors / interventions / arms
 ```bash
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
-./.venv/bin/pytest tests/ -q          # 23 tests, no network
+./.venv/bin/pytest tests/ -q          # 28 tests, no network
 ```
 
 ## Run the matrix (local)
@@ -124,12 +231,12 @@ bash scripts/fetch_terminal_bench.sh
 #    (include_tasks: [...], limit: N, skip_gpu_tasks, price/margin per difficulty)
 
 # 3. credentials: copy .env.example -> .env and fill in
-#    E2B_API_KEY (+ E2B_DOMAIN if self-hosted) and ANTHROPIC_API_KEY.
+#    E2B_API_KEY (+ E2B_DOMAIN if self-hosted) and OPENAI_API_KEY (or ANTHROPIC_API_KEY).
 #    The orchestrator auto-loads .env (python-dotenv).
 cp .env.example .env    # then edit
 
 # 4. real provider (TB2 tasks need a capable model)
-#    set active_provider: anthropic in config/providers.yaml
+#    set active_provider: openai in config/providers.yaml (the full run used gpt-5.6)
 
 # 5. OPTIONAL but recommended: build/validate E2B templates first (no model calls),
 #    so incompatible images surface before you spend tokens.
@@ -156,17 +263,18 @@ interventions/analysis are all shared with the local path — only the execution
 
 Set `active_provider` in `config/providers.yaml`:
 
-- **`mock`** — deterministic test double / failure-mode simulator. Zero inference,
-  zero network. Proves the whole pipeline (what the current results use).
-- **`ollama`** — local Ollama (OpenAI-compatible) for free dev iteration on a real
-  model. Requires `ollama serve` + a pulled Qwen pair; edit `model_pair` to the tags
-  you pulled.
-- **`anthropic`** — native Anthropic SDK for the credible final matrix. Requires
-  `ANTHROPIC_API_KEY`. Adapter is unit-tested against a mocked SDK, so switching needs
-  no code change.
+- **`openai`** — native OpenAI Chat Completions, incl. the GPT-5 reasoning family
+  (**what the full-benchmark results above used**: `gpt-5.6-terra` primary + `gpt-5-mini`
+  downshift). Requires `OPENAI_API_KEY`.
+- **`anthropic`** — native Anthropic SDK (Claude). Requires `ANTHROPIC_API_KEY`.
+- **`ollama`** — local Ollama (OpenAI-compatible) for free dev iteration on a real model.
+  Requires `ollama serve` + a pulled model pair (e.g. a Qwen large/small pair).
+- **`mock`** — deterministic test double / failure-mode simulator. Zero inference, zero
+  network. Used to validate the whole pipeline before spending on a real provider.
 
-Costs come from real token counts × the per-model rate card in `config/rate_card.yaml`
-(synthetic for mock/ollama, real published pricing for anthropic).
+Each adapter is exercised by a unit test (mocked SDK where relevant), so switching backends
+needs no code change. Costs come from **real token counts × the per-model rate card**
+(`config/rate_card.yaml`) — synthetic rates for mock/ollama, real pricing for hosted APIs.
 
 ## Status vs the AGENTS.MD build order
 
