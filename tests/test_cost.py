@@ -8,8 +8,8 @@ from gateway.schema import Usage
 
 def test_ollama_no_cache():
     rc = RateCard.load("ollama")
-    # qwen2.5:32b -> 3.00 input, 15.00 output per Mtok.
-    cost = rc.cost("qwen2.5:32b", Usage(input_tokens=2000, output_tokens=500))
+    # qwen3.5:4b -> 3.00 input, 15.00 output per Mtok.
+    cost = rc.cost("qwen3.5:4b", Usage(input_tokens=2000, output_tokens=500))
     expected = 2000 * 3.0 / 1e6 + 500 * 15.0 / 1e6  # 0.006 + 0.0075
     assert math.isclose(cost, expected, rel_tol=1e-9)
 
@@ -17,7 +17,7 @@ def test_ollama_no_cache():
 def test_ollama_cheap_sibling_is_cheaper():
     rc = RateCard.load("ollama")
     u = Usage(input_tokens=5000, output_tokens=1000)
-    assert rc.cost("qwen2.5:7b", u) < rc.cost("qwen2.5:32b", u)
+    assert rc.cost("qwen3:1.7b", u) < rc.cost("qwen3.5:4b", u)
 
 
 def test_anthropic_additive_cache_bucket():
@@ -41,5 +41,5 @@ def test_cached_tokens_cheaper_than_uncached():
 
 def test_has_and_missing_model():
     rc = RateCard.load("ollama")
-    assert rc.has("qwen2.5:32b")
+    assert rc.has("qwen3.5:4b")
     assert not rc.has("nonexistent-model")
