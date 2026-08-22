@@ -10,3 +10,4 @@ tasks/terminal_bench/
 .env
 .pytest_cache/
 .DS_Store
+.backup/
