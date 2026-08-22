@@ -41,6 +41,7 @@ import httpx
 import yaml
 
 from agent.exec_env import E2BExecEnv
+from gateway.run_log import RunLog
 from agent.terminal_tools import (
     TERMINAL_SYSTEM_PROMPT,
     TERMINAL_TOOL_SCHEMAS,
@@ -205,13 +206,29 @@ def run_matrix(
                 port = _free_port()
                 proc = None
                 env = None
+                # Sandboxes are billed by the second, so the run log has to record the
+                # window we actually held one. Without this, infrastructure cost can
+                # only be recovered from a provider dashboard, never per (task, arm).
+                t_sandbox_open = None
+                sandbox_create_sec = None
+                verify_sec: list[float] = []
                 try:
+                    t_create = time.monotonic()
                     sandbox = _create_sandbox(alias, task)
+                    sandbox_create_sec = round(time.monotonic() - t_create, 3)
+                    t_sandbox_open = t_create
                     env = E2BExecEnv(sandbox)
 
                     proc = _spawn_gateway(port, arm, task, seed)
                     gateway_url = f"http://127.0.0.1:{port}"
                     _wait_healthy(port)
+
+                    def _timed_verify(_t, _f, e=env, tk=task, sink=verify_sec):
+                        t0 = time.monotonic()
+                        try:
+                            return verify_resolved(e, tk)
+                        finally:
+                            sink.append(round(time.monotonic() - t0, 3))
 
                     summary = run_agent(
                         gateway_url=gateway_url,
@@ -222,7 +239,7 @@ def run_matrix(
                         prompt=task.instruction,
                         tool_schemas=TERMINAL_TOOL_SCHEMAS,
                         tool_runner=make_terminal_tool_runner(env),
-                        resolve_fn=lambda _t, _f, e=env, tk=task: verify_resolved(e, tk),
+                        resolve_fn=_timed_verify,
                         system_prompt=TERMINAL_SYSTEM_PROMPT,
                         max_steps=max_steps,
                         seed=seed,
@@ -246,6 +263,13 @@ def run_matrix(
                             proc.kill()
                     if env is not None:
                         env.close()  # kills the sandbox
+                    if t_sandbox_open is not None:
+                        RunLog.attach_timing(
+                            RUNS_DIR / f"{run_id}.json",
+                            sandbox_sec=round(time.monotonic() - t_sandbox_open, 3),
+                            sandbox_create_sec=sandbox_create_sec,
+                            verify_sec=verify_sec[-1] if verify_sec else None,
+                        )
 
     return results
 

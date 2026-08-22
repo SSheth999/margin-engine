@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, Header, Request
@@ -77,7 +78,7 @@ def create_app() -> FastAPI:
 
     # The single run this gateway instance serves. Built lazily on first /v1/chat
     # (so we know contracted_price / margin_ceiling from the headers).
-    state = {"run_log": None, "outcome_id": None}
+    state = {"run_log": None, "outcome_id": None, "t_first_call": None}
 
     @app.get("/health")
     def health():
@@ -90,12 +91,14 @@ def create_app() -> FastAPI:
         x_contracted_price: float = Header(default=1.0),
         x_target_margin: float = Header(default=0.0),
     ):
+        t_call_start = time.monotonic()
         body = await request.json()
         chat_req = ChatRequest.from_dict(body)
 
         st = store.get_or_create(x_outcome_id, x_contracted_price, x_target_margin)
 
         if state["run_log"] is None:
+            state["t_first_call"] = t_call_start
             state["outcome_id"] = x_outcome_id
             state["run_log"] = RunLog(
                 task_id=task_id,
@@ -207,6 +210,7 @@ def create_app() -> FastAPI:
                     tool=tool_name,
                     args_hash=tool_ah,
                     detected_failure_mode=detected_mode,
+                    latency_sec=round(time.monotonic() - t_call_start, 3),
                 )
             )
         except Exception as e:
@@ -242,6 +246,8 @@ def create_app() -> FastAPI:
                 provider=provider.name,
             )
         run_log.resolved = bool(body.get("resolved", False))
+        if state["t_first_call"] is not None:
+            run_log.agent_loop_sec = round(time.monotonic() - state["t_first_call"], 3)
         # Known at runtime only for C-oracle; step-5 labeling backfills it for other arms.
         if true_mode is not None:
             run_log.true_failure_mode = true_mode

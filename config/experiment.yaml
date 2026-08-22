@@ -35,3 +35,10 @@ margin_by_class:
 # E2B connection is read from env by the SDK: E2B_API_KEY (required),
 # E2B_DOMAIN (for a self-hosted E2B instance). Each Harbor image is built into an E2B
 # template once; the image -> alias map is cached in config/e2b_templates.json.
+
+# Sandbox price for the infrastructure-cost estimate in analysis.report. Model spend is
+# only part of the bill: sandboxes are billed by the second, so an intervention that cuts
+# tokens but raises step count can be a net loss. Set this to your E2B rate (USD per
+# sandbox-hour) to see model vs infra split per arm; leave null to report hours only.
+# Run logs must carry `sandbox_sec` (recorded from the 2026-08 sweep onward).
+e2b_usd_per_sandbox_hour: null

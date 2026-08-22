@@ -30,6 +30,11 @@ class StepRecord:
     tool: str | None = None
     args_hash: str | None = None
     detected_failure_mode: str | None = None  # populated in shadow-mode pass
+    # Wall-clock for the provider call plus the tool exec that followed it. Model spend
+    # is only half the bill: sandboxes are billed by the second, so a run's DURATION is
+    # what prices the infrastructure. Without it, sandbox cost is unknowable after the
+    # fact — which is exactly the position the first full benchmark left us in.
+    latency_sec: float | None = None
 
 
 @dataclass
@@ -56,6 +61,16 @@ class RunLog:
     detected_failure_mode: str | None = None
     true_failure_mode: str | None = None
     error: str | None = None
+
+    # --- timing (all wall-clock seconds; None when not measured) ---
+    # agent_loop_sec is measured by the gateway (first model call -> finalize).
+    # The sandbox fields are patched in by the orchestrator, which owns the sandbox
+    # lifecycle and therefore knows the billable window. See `attach_timing`.
+    agent_loop_sec: float | None = None
+    sandbox_sec: float | None = None       # create -> close: the billable window
+    sandbox_create_sec: float | None = None
+    verify_sec: float | None = None
+
     interventions: list[InterventionRecord] = field(default_factory=list)
     per_step: list[StepRecord] = field(default_factory=list)
 
@@ -67,6 +82,22 @@ class RunLog:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @staticmethod
+    def attach_timing(path: Path, **fields: float | None) -> None:
+        """Merge timing fields into an already-written run log.
+
+        The gateway writes the log on /v1/finalize, but only the orchestrator knows how
+        long the sandbox was alive. Rather than thread that back through the agent's
+        finalize call, the orchestrator patches the file afterwards. Best-effort: a
+        failure here must never sink a run whose real work already succeeded.
+        """
+        try:
+            log = json.loads(path.read_text())
+            log.update({k: v for k, v in fields.items() if v is not None})
+            path.write_text(json.dumps(log, indent=2))
+        except Exception:
+            pass
 
     def write(self, out_dir: Path) -> Path:
         out_dir.mkdir(parents=True, exist_ok=True)

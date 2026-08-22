@@ -43,3 +43,29 @@ def test_has_and_missing_model():
     rc = RateCard.load("ollama")
     assert rc.has("qwen3.5:4b")
     assert not rc.has("nonexistent-model")
+
+
+def test_attach_timing_merges_without_clobbering(tmp_path):
+    """The orchestrator patches sandbox timing into a log the gateway already wrote."""
+    import json
+
+    from gateway.run_log import RunLog
+
+    p = tmp_path / "run.json"
+    p.write_text(json.dumps({"task_id": "t", "final_cost": 0.5, "sandbox_sec": None}))
+    RunLog.attach_timing(p, sandbox_sec=12.5, verify_sec=3.0, sandbox_create_sec=None)
+    got = json.loads(p.read_text())
+    assert got["sandbox_sec"] == 12.5 and got["verify_sec"] == 3.0
+    assert got["final_cost"] == 0.5           # existing fields preserved
+    assert "sandbox_create_sec" not in got    # None values are not written
+
+
+def test_attach_timing_is_best_effort(tmp_path):
+    """A timing-patch failure must never sink a run whose real work succeeded."""
+    from gateway.run_log import RunLog
+
+    RunLog.attach_timing(tmp_path / "missing.json", sandbox_sec=1.0)  # no raise
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    RunLog.attach_timing(bad, sandbox_sec=1.0)  # no raise
+    assert bad.read_text() == "{not json"

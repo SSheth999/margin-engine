@@ -29,6 +29,8 @@ from pathlib import Path
 import httpx
 import yaml
 
+from gateway.run_log import RunLog
+
 REPO = Path(__file__).resolve().parent.parent
 CONFIG_DIR = REPO / "config"
 RUNS_DIR = REPO / "runs"
@@ -161,6 +163,7 @@ def run_matrix(
                 port = _free_port()
                 proc = _spawn_gateway(port, arm, task, seed)
                 gateway_url = f"http://127.0.0.1:{port}"
+                t_run_open = time.monotonic()
                 try:
                     _wait_healthy(port)
                     summary = run_agent(
@@ -195,6 +198,12 @@ def run_matrix(
                         proc.wait(timeout=10)
                     except subprocess.TimeoutExpired:
                         proc.kill()
+                    # No sandbox locally, but recording the same field keeps the run-log
+                    # schema uniform so analysis code needs no local/E2B special case.
+                    RunLog.attach_timing(
+                        RUNS_DIR / f"{run_id}.json",
+                        sandbox_sec=round(time.monotonic() - t_run_open, 3),
+                    )
 
     return results
 
