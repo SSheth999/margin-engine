@@ -57,3 +57,43 @@ def test_compact_noop_when_short():
     req = _req_with_turns(2)
     out = compact(req, keep_recent_turns=3)
     assert len(out.messages) == len(req.messages)
+
+
+def test_compaction_gain_measures_dropped_fraction():
+    """The break-even guard needs a real measure of how much a trim removes."""
+    from gateway.interventions import compaction_gain
+
+    req = _req_with_turns(10)
+    gain = compaction_gain(req, keep_recent_turns=3)
+    assert 0.0 < gain < 1.0
+    # keeping fewer recent turns must drop strictly more
+    assert compaction_gain(req, keep_recent_turns=2) > gain
+
+
+def test_compaction_gain_zero_when_nothing_to_drop():
+    from gateway.interventions import compaction_gain
+
+    assert compaction_gain(_req_with_turns(2), keep_recent_turns=3) == 0.0
+
+
+def test_compaction_gain_matches_what_compact_removes():
+    """Guard and action must agree, or the guard is gating on fiction."""
+    from gateway.interventions import compact, compaction_gain
+
+    def chars(msgs):
+        return sum(
+            len(m.get("content") or "") + sum(len(str(tc.get("arguments", ""))) for tc in m.get("tool_calls") or [])
+            for m in msgs
+            if m.get("role") != "system"
+        )
+
+    # Big turn bodies so the fixed-size elision note stays negligible.
+    req = _req_with_turns(12)
+    for m in req.messages:
+        if m["role"] == "tool":
+            m["content"] = m["content"] * 200
+    gain = compaction_gain(req, keep_recent_turns=3)
+    out = compact(req, keep_recent_turns=3)
+    # the elision note adds a few chars to the task turn, so allow a small tolerance
+    actual = 1 - chars(out.messages) / chars(req.messages)
+    assert abs(actual - gain) < 0.02

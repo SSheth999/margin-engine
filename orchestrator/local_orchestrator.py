@@ -35,7 +35,10 @@ RUNS_DIR = REPO / "runs"
 WORKSPACES_DIR = RUNS_DIR / "workspaces"
 LABELS_PATH = CONFIG_DIR / "labels.json"
 
-ALL_ARMS = ["A", "B", "C", "C-oracle"]
+# A-prime is the placebo (identical policy to A) that measures the run-to-run noise
+# floor; D is the laddered cost-ratio arm. Both are ordinary arms to the orchestrator —
+# the behavior difference lives entirely in gateway/arms.py.
+ALL_ARMS = ["A", "A-prime", "B", "C", "C-oracle", "D"]
 
 
 def _free_port() -> int:
@@ -202,7 +205,10 @@ def _label_and_backfill() -> None:
 
     labels = build_labels(RUNS_DIR)
     LABELS_PATH.write_text(json.dumps(labels, indent=2))
-    n = backfill_true_mode(labels, RUNS_DIR)
+    # Mid-sweep labeling writes `true_failure_mode` — the label the remaining arms
+    # will actually execute against. (Re-labeling AFTER a sweep must not touch that
+    # field; analysis.labeling defaults to `relabeled_failure_mode` for that reason.)
+    n = backfill_true_mode(labels, RUNS_DIR, field="true_failure_mode")
     print(f"[labeling] {len(labels)} labels written, backfilled into {n} logs")
 
 
@@ -233,12 +239,12 @@ def _main() -> None:
     results: list[dict] = []
     if args.full:
         # C-oracle depends on labels from Arm A, so A must complete and be labeled first.
-        print("=== phase 1: Arm A ===")
-        results += run_matrix(tasks, seeds, ["A"], args.max_steps)
+        print("=== phase 1: Arms A + A-prime (control + placebo) ===")
+        results += run_matrix(tasks, seeds, ["A", "A-prime"], args.max_steps)
         print("=== phase 2: labeling ===")
         _label_and_backfill()
-        print("=== phase 3: Arms B / C / C-oracle ===")
-        results += run_matrix(tasks, seeds, ["B", "C", "C-oracle"], args.max_steps)
+        print("=== phase 3: Arms B / C / C-oracle / D ===")
+        results += run_matrix(tasks, seeds, ["B", "C", "C-oracle", "D"], args.max_steps)
     else:
         arms = ALL_ARMS if args.arms == "all" else [a for a in args.arms.split(",") if a]
         results += run_matrix(tasks, seeds, arms, args.max_steps)

@@ -23,3 +23,38 @@ early_steps: 4
 
 # Compaction keeps system messages + the first (task) turn + this many recent turns.
 compact_keep_recent_turns: 3
+
+# ---------------------------------------------------------------------------------
+# Arm D — laddered budget policy. Not a failure-mode-matched arm: a graduated
+# escalation on the cost ratio alone, built from what the first full benchmark showed
+# actually works.
+#
+#   >= d_downshift_ratio : downshift to the cheap sibling (the single most effective
+#                          lever measured: margin-blown 41.4% -> 2.3% in Arm B).
+#   >= d_compact_ratio   : additionally compact ONCE, and only if the trim is large
+#                          enough to beat the prompt-cache invalidation it causes
+#                          (see interventions.compaction_gain).
+#   >= d_stop_ratio      : hard stop. Overrunning the ceiling almost never buys the
+#                          outcome — Arm A resolved 8% of blown runs vs 45% of held
+#                          runs — so stopping at the ceiling caps P99 by construction
+#                          and gives up little quality.
+d_downshift_ratio: 0.60
+d_compact_ratio: 0.85
+d_stop_ratio: 1.00
+
+# Stop on the PROJECTED cost (cum + trailing-mean per-call cost) rather than on money
+# already spent. A spent-only check waves a run through at ratio 0.99 and overshoots by
+# a whole call; projecting forward is what makes the ceiling actually hold.
+d_stop_lookahead: true
+
+# Compact aggressively when compacting at all (keep fewer recent turns than arm C's 3),
+# at most this many times per run, and only when it drops at least this fraction of the
+# prompt. min_drop_fraction 0.60 => dropped/surviving = 1.5, so the break-even is ~2
+# further calls at a 0.25 cache multiplier.
+d_compact_keep_recent_turns: 2
+d_compact_max_per_run: 1
+d_compact_min_drop_fraction: 0.60
+
+# Skip compaction entirely when this much of the last prompt was served from cache —
+# there the prefix is already cheap and invalidating it costs more than it saves.
+d_compact_max_cache_share: 0.85

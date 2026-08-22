@@ -42,6 +42,16 @@ class DetectionConfig:
     early_steps: int = 4
     compact_keep_recent_turns: int = 3
 
+    # Arm D ladder (cost-ratio thresholds + cache-aware compaction guards).
+    d_downshift_ratio: float = 0.60
+    d_compact_ratio: float = 0.85
+    d_stop_ratio: float = 1.00
+    d_stop_lookahead: bool = True
+    d_compact_keep_recent_turns: int = 2
+    d_compact_max_per_run: int = 1
+    d_compact_min_drop_fraction: float = 0.60
+    d_compact_max_cache_share: float = 0.85
+
     @classmethod
     def load(cls, config_dir: Path | None = None) -> "DetectionConfig":
         cfg_dir = config_dir or CONFIG_DIR

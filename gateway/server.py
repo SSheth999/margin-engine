@@ -182,7 +182,18 @@ def create_app() -> FastAPI:
             )
             ctx_size = _estimate_context_size(forward_req)
 
-            store.record_call(x_outcome_id, call_cost, ctx_size, tool_name, tool_ah)
+            # Token mix is recorded too: cache-aware interventions (arm D) need to know
+            # how much of the prompt is currently served from cache before deciding
+            # whether compacting can pay for the invalidation it causes.
+            store.record_call(
+                x_outcome_id,
+                call_cost,
+                ctx_size,
+                tool_name,
+                tool_ah,
+                input_tokens=resp.usage.input_tokens,
+                cached_tokens=resp.usage.cached_tokens,
+            )
             run_log.add_step(
                 StepRecord(
                     step=st.step_count,
