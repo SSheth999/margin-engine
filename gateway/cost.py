@@ -55,6 +55,10 @@ class RateCard:
     def has(self, model: str) -> bool:
         return model in self._rates
 
+    def rate(self, model: str) -> ModelRate:
+        """The per-model rates. Raises KeyError if the model isn't in the card."""
+        return self._rates[model]
+
     def cost(self, model: str, usage: Usage) -> float:
         """USD cost for one call. Raises KeyError if the model isn't in the card."""
         r = self._rates[model]
